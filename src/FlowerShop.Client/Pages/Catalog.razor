@@ -1,0 +1,88 @@
+@page "/"
+@implements IDisposable
+@inject ApiClient Api
+@inject ToastService Toasts
+<PageTitle>FlowerShop – fresh flowers in Astana</PageTitle>
+
+<h1>Fresh flowers, delivered today</h1>
+
+<section class="filters" aria-label="Filters">
+    <input type="search" placeholder="Search bouquets…" aria-label="Search" value="@_search" @oninput="OnSearch" />
+    <select aria-label="Category" @onchange="OnCategory">
+        <option value="">All categories</option>
+        @foreach (var c in _categories) { <option value="@c" selected="@(c == _category)">@c</option> }
+    </select>
+</section>
+
+@if (_error is not null)
+{
+    <div class="card center"><p>@_error</p><button class="btn" @onclick="Load">Retry</button></div>
+}
+else
+{
+    <DataList TItem="ProductDto" Items="_page?.Items" Loading="_loading">
+        <ItemTemplate Context="p"><ProductCard Product="p" OnAdd="AddToCart" /></ItemTemplate>
+        <Empty><p class="muted center">No flowers match your search.</p></Empty>
+    </DataList>
+
+    @if (_page is { Total: > 0 })
+    {
+        <nav class="pager" aria-label="Pagination">
+            <button class="btn ghost" disabled="@(_pageNo <= 1)" @onclick="() => GoTo(_pageNo - 1)">‹ Prev</button>
+            <span>Page @_pageNo of @TotalPages</span>
+            <button class="btn ghost" disabled="@(_pageNo >= TotalPages)" @onclick="() => GoTo(_pageNo + 1)">Next ›</button>
+        </nav>
+    }
+}
+
+@code {
+    [CascadingParameter] CartState Cart { get; set; } = default!;
+    const int PageSize = 8;
+    PagedResult<ProductDto>? _page;
+    List<string> _categories = [];
+    string _search = "", _category = "";
+    string? _error;
+    int _pageNo = 1;
+    bool _loading = true;
+    CancellationTokenSource? _cts;
+    int TotalPages => _page is null ? 1 : Math.Max(1, (int)Math.Ceiling(_page.Total / (double)PageSize));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var cats = await Api.CategoriesAsync();
+        if (cats.IsOk) _categories = cats.Value!;
+        await Load();
+    }
+
+    async Task Load()
+    {
+        _cts?.Cancel();
+        _cts = new CancellationTokenSource();
+        _loading = true; _error = null;
+        var r = await Api.ProductsAsync(_category, _search, _pageNo, PageSize, _cts.Token);
+        if (r.Error == "cancelled") return;
+        _loading = false;
+        if (r.IsOk) _page = r.Value; else _error = r.Error;
+    }
+
+    int _searchTick;
+    async Task OnSearch(ChangeEventArgs e)
+    {
+        _search = e.Value?.ToString() ?? "";
+        _pageNo = 1;
+        var tick = ++_searchTick;
+        await Task.Delay(300); // debounce: only the last keystroke triggers a request
+        if (tick == _searchTick) await Load();
+    }
+
+    async Task OnCategory(ChangeEventArgs e) { _category = e.Value?.ToString() ?? ""; _pageNo = 1; await Load(); }
+    async Task GoTo(int n) { _pageNo = Math.Clamp(n, 1, TotalPages); await Load(); }
+
+    void AddToCart(ProductDto p)
+    {
+        var r = Cart.Add(p);
+        if (r.IsOk) Toasts.Success($"{p.Name} added to cart"); else Toasts.Error(r.Error!);
+    }
+
+    public void Dispose() => _cts?.Cancel();
+}

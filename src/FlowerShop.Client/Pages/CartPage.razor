@@ -1,0 +1,40 @@
+@page "/cart"
+@implements IDisposable
+<PageTitle>Your cart</PageTitle>
+<h1>Your cart</h1>
+
+@if (Cart.Lines.Count == 0)
+{
+    <div class="card center"><p>Your cart is empty.</p><a class="btn" href="">Browse flowers</a></div>
+}
+else
+{
+    <div class="stack">
+        @foreach (var l in Cart.Lines)
+        {
+            <div class="card row">
+                <span>@l.Product.Emoji <strong>@l.Product.Name</strong><br /><span class="muted">@l.Product.Price.ToString("N0") ₸</span></span>
+                <span class="qty">
+                    <button class="btn ghost" aria-label="Decrease" @onclick="() => Cart.SetQuantity(l.Product, l.Quantity - 1)">−</button>
+                    <output aria-live="polite">@l.Quantity</output>
+                    <button class="btn ghost" aria-label="Increase" @onclick="() => Cart.SetQuantity(l.Product, l.Quantity + 1)">+</button>
+                </span>
+                <strong>@l.Total.ToString("N0") ₸</strong>
+                <button class="link" aria-label="@($"Remove {l.Product.Name}")" @onclick="() => Cart.Remove(l.Product)">✕</button>
+            </div>
+        }
+        <div class="card">
+            <div class="row"><span>Subtotal</span><span>@Cart.Subtotal.ToString("N0") ₸</span></div>
+            <div class="row"><span>Delivery</span><span>@(Cart.Delivery == 0 ? "Free" : Cart.Delivery.ToString("N0") + " ₸")</span></div>
+            <div class="row total"><span>Total</span><strong>@Cart.Total.ToString("N0") ₸</strong></div>
+            <a class="btn wide" href="checkout">Checkout</a>
+        </div>
+    </div>
+}
+
+@code {
+    [CascadingParameter] CartState Cart { get; set; } = default!;
+    protected override void OnInitialized() => Cart.Changed += Refresh;
+    void Refresh() => InvokeAsync(StateHasChanged);
+    public void Dispose() => Cart.Changed -= Refresh;
+}

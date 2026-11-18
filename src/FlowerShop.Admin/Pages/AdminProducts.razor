@@ -1,0 +1,100 @@
+@page "/admin/products"
+@attribute [Authorize(Roles = "Admin")]
+@using System.ComponentModel.DataAnnotations
+@inject ApiClient Api
+@inject ToastService Toasts
+<PageTitle>Admin – products</PageTitle>
+<h1>Products</h1>
+
+<EditForm Model="_form" OnValidSubmit="Save" class="card stack">
+    <DataAnnotationsValidator />
+    <h2>@(_editingId is null ? "Add product" : $"Edit product #{_editingId}")</h2>
+    <label>Name <InputText @bind-Value="_form.Name" /><ValidationMessage For="() => _form.Name" /></label>
+    <label>Description <InputText @bind-Value="_form.Description" /><ValidationMessage For="() => _form.Description" /></label>
+    <div class="filters">
+        <label>Price (₸) <InputNumber @bind-Value="_form.Price" /><ValidationMessage For="() => _form.Price" /></label>
+        <label>Stock <InputNumber @bind-Value="_form.Stock" /><ValidationMessage For="() => _form.Stock" /></label>
+    </div>
+    <div class="filters">
+        <label>Category <InputText @bind-Value="_form.Category" list="cats" /><ValidationMessage For="() => _form.Category" /></label>
+        <label>Emoji <InputText @bind-Value="_form.Emoji" /><ValidationMessage For="() => _form.Emoji" /></label>
+    </div>
+    <datalist id="cats">@foreach (var c in _items.Select(i => i.Category).Distinct()) { <option value="@c" /> }</datalist>
+    <div class="row">
+        <button class="btn" type="submit" disabled="@_busy">@(_editingId is null ? "Add" : "Save changes")</button>
+        @if (_editingId is not null) { <button class="btn ghost" type="button" @onclick="Reset">Cancel</button> }
+    </div>
+</EditForm>
+
+@if (_error is not null) { <div class="card center"><p>@_error</p><button class="btn" @onclick="Load">Retry</button></div> }
+
+<div class="stack" style="margin-top:1rem">
+    @foreach (var p in _items)
+    {
+        <div class="card row">
+            <span>@p.Emoji <strong>@p.Name</strong> <span class="muted">· @p.Category · @p.Price.ToString("N0") ₸ · stock @p.Stock</span></span>
+            <span>
+                <button class="btn ghost" @onclick="() => Edit(p)">Edit</button>
+                @if (_confirmId == p.Id)
+                {
+                    <button class="btn" @onclick="() => Delete(p)">Confirm delete</button>
+                    <button class="link" @onclick="() => _confirmId = null">No</button>
+                }
+                else { <button class="link" @onclick="() => _confirmId = p.Id" aria-label="@($"Delete {p.Name}")">Delete</button> }
+            </span>
+        </div>
+    }
+</div>
+
+@code {
+    List<ProductDto> _items = [];
+    string? _error;
+    int? _editingId, _confirmId;
+    bool _busy;
+    Form _form = new();
+
+    sealed class Form
+    {
+        [Required, StringLength(80)] public string Name { get; set; } = "";
+        [StringLength(300)] public string Description { get; set; } = "";
+        [Range(1, 10_000_000)] public decimal Price { get; set; } = 1000;
+        [Required, StringLength(40)] public string Category { get; set; } = "";
+        [Required, StringLength(8)] public string Emoji { get; set; } = "💐";
+        [Range(0, 10_000)] public int Stock { get; set; } = 10;
+    }
+
+    protected override Task OnInitializedAsync() => Load();
+
+    async Task Load()
+    {
+        var r = await Api.ProductsAsync(null, null, 1, 50);
+        if (r.IsOk) { _items = r.Value!.Items.ToList(); _error = null; } else _error = r.Error;
+    }
+
+    void Edit(ProductDto p)
+    {
+        _editingId = p.Id;
+        _form = new Form { Name = p.Name, Description = p.Description, Price = p.Price, Category = p.Category, Emoji = p.Emoji, Stock = p.Stock };
+    }
+
+    void Reset() { _editingId = null; _form = new(); }
+
+    async Task Save()
+    {
+        _busy = true;
+        var dto = new ProductUpsert(_form.Name, _form.Description, _form.Price, _form.Category, _form.Emoji, _form.Stock);
+        var r = _editingId is null ? await Api.CreateProductAsync(dto) : await Api.UpdateProductAsync(_editingId.Value, dto);
+        _busy = false;
+        if (!r.IsOk) { Toasts.Error(r.Error!); return; }
+        Toasts.Success(_editingId is null ? "Product added" : "Product updated");
+        Reset();
+        await Load();
+    }
+
+    async Task Delete(ProductDto p)
+    {
+        var r = await Api.DeleteProductAsync(p.Id);
+        _confirmId = null;
+        if (r.IsOk) { Toasts.Success($"{p.Name} deleted"); await Load(); } else Toasts.Error(r.Error!);
+    }
+}

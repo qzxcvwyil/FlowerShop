@@ -1,0 +1,20 @@
+<article class="card order">
+    <div class="row">
+        <strong>Order #@Order.Id</strong>
+        <StatusBadge Status="Order.Status" />
+    </div>
+    <p class="muted">@Order.CreatedUtc.ToLocalTime().ToString("dd MMM yyyy HH:mm") · @Order.Address</p>
+    <ul>
+        @foreach (var l in Order.Lines)
+        {
+            <li>@l.Quantity × @l.Name <span class="muted">(@l.UnitPrice.ToString("N0") ₸)</span></li>
+        }
+    </ul>
+    <div class="row"><span class="muted">Delivery @Order.Delivery.ToString("N0") ₸</span><strong>@Order.Total.ToString("N0") ₸</strong></div>
+    @ChildContent
+</article>
+
+@code {
+    [Parameter, EditorRequired] public OrderDto Order { get; set; } = default!;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

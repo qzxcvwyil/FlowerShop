@@ -1,0 +1,43 @@
+@using System.Reflection
+@using Microsoft.AspNetCore.Components.WebAssembly.Services
+@inject LazyAssemblyLoader AssemblyLoader
+
+<CascadingAuthenticationState>
+    <Router AppAssembly="typeof(App).Assembly" AdditionalAssemblies="_lazyAssemblies" OnNavigateAsync="OnNavigateAsync">
+        <Navigating><p class="muted center" role="status">Loading…</p></Navigating>
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
+                <NotAuthorized>
+                    <div class="card center">
+                        <h2>Access denied</h2>
+                        <p>Please <a href="login">sign in</a>. The admin area requires the Admin role.</p>
+                    </div>
+                </NotAuthorized>
+                <Authorizing><p class="muted center">Checking your session…</p></Authorizing>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <LayoutView Layout="typeof(MainLayout)">
+                <div class="card center"><h1>Page not found</h1><a href="">Back to the shop</a></div>
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>
+
+@code {
+    readonly List<Assembly> _lazyAssemblies = [];
+    bool _adminLoaded;
+
+    /// <summary>Route-level lazy loading: the admin assembly is downloaded only on the first visit to /admin.</summary>
+    async Task OnNavigateAsync(NavigationContext context)
+    {
+        if (_adminLoaded || !context.Path.StartsWith("admin", StringComparison.OrdinalIgnoreCase)) return;
+        try
+        {
+            _lazyAssemblies.AddRange(await AssemblyLoader.LoadAssembliesAsync(["FlowerShop.Admin.wasm"]));
+            _adminLoaded = true;
+        }
+        catch (Exception ex) { Console.Error.WriteLine($"Lazy load failed: {ex.Message}"); }
+    }
+}

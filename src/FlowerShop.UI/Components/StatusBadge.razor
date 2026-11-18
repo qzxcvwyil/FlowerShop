@@ -1,0 +1,10 @@
+<span class="status s-@Status.ToString().ToLower()">@Label</span>
+
+@code {
+    [Parameter, EditorRequired] public OrderStatus Status { get; set; }
+    string Label => Status switch
+    {
+        OrderStatus.OutForDelivery => "Out for delivery",
+        _ => Status.ToString()
+    };
+}

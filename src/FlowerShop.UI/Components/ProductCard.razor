@@ -1,0 +1,21 @@
+<article class="card product">
+    <div class="emoji" aria-hidden="true">@Product.Emoji</div>
+    <h3>@Product.Name</h3>
+    <p class="muted">@Product.Description</p>
+    <div class="row">
+        <strong>@Product.Price.ToString("N0") ₸</strong>
+        @if (Product.Stock == 0)
+        {
+            <span class="muted">Sold out</span>
+        }
+        else
+        {
+            <button class="btn" @onclick="() => OnAdd.InvokeAsync(Product)" aria-label="@($"Add {Product.Name} to cart")">Add</button>
+        }
+    </div>
+</article>
+
+@code {
+    [Parameter, EditorRequired] public ProductDto Product { get; set; } = default!;
+    [Parameter] public EventCallback<ProductDto> OnAdd { get; set; }
+}

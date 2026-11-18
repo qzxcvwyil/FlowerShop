@@ -1,0 +1,36 @@
+@implements IDisposable
+@inject ToastService Toasts
+
+<div class="toasts" aria-live="polite" role="status">
+    @foreach (var t in _items)
+    {
+        <div class="toast @t.Kind.ToString().ToLower()">@t.Text</div>
+    }
+</div>
+
+@code {
+    readonly List<Toast> _items = [];
+    readonly CancellationTokenSource _cts = new();
+
+    protected override void OnInitialized() => Toasts.Shown += OnShown;
+
+    async void OnShown(Toast t)
+    {
+        try
+        {
+            _items.Add(t);
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(3500, _cts.Token);
+            _items.Remove(t);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException) { }   // component disposed while toast was visible
+        catch (ObjectDisposedException) { }
+    }
+
+    public void Dispose()
+    {
+        Toasts.Shown -= OnShown;
+        _cts.Cancel();
+    }
+}

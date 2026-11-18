@@ -1,0 +1,38 @@
+@page "/login"
+@inject ApiClient Api
+@inject AuthService Auth
+@inject NavigationManager Nav
+<PageTitle>Sign in</PageTitle>
+<h1>@(_register ? "Create account" : "Sign in")</h1>
+
+<form class="card stack narrow" @onsubmit="Submit">
+    @if (_register)
+    {
+        <label>Full name <input @bind="_name" autocomplete="name" required /></label>
+    }
+    <label>Email <input type="email" @bind="_email" autocomplete="email" required /></label>
+    <label>Password <input type="password" @bind="_password" autocomplete="@(_register ? "new-password" : "current-password")" required /></label>
+    @if (_error is not null) { <p class="error" role="alert">@_error</p> }
+    <button class="btn wide" disabled="@_busy">@(_register ? "Register" : "Sign in")</button>
+    <button type="button" class="link" @onclick="() => { _register = !_register; _error = null; }">
+        @(_register ? "I already have an account" : "Create a new account")
+    </button>
+</form>
+
+@code {
+    string _email = "", _password = "", _name = "";
+    string? _error;
+    bool _register, _busy;
+
+    async Task Submit()
+    {
+        _busy = true; _error = null;
+        var r = _register
+            ? await Api.RegisterAsync(new RegisterRequest(_email, _password, _name))
+            : await Api.LoginAsync(new LoginRequest(_email, _password));
+        _busy = false;
+        if (!r.IsOk) { _error = r.Error; return; }
+        await Auth.SignInAsync(r.Value!);
+        Nav.NavigateTo("");
+    }
+}

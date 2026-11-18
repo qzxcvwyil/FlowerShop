@@ -1,0 +1,16 @@
+# docker compose up --build        ->  http://localhost:8080
+# Secrets come from the environment (or a .env file next to this file), never from the repository:
+#   JWT_KEY=<32+ random characters>   ADMIN_EMAIL=...   ADMIN_PASSWORD=...
+services:
+  flowershop:
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Jwt__Key: ${JWT_KEY:?set JWT_KEY (32+ characters)}
+      Seed__AdminEmail: ${ADMIN_EMAIL:-admin@flowershop.kz}
+      Seed__AdminPassword: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
+    volumes:
+      - flowershop-data:/data
+volumes:
+  flowershop-data:

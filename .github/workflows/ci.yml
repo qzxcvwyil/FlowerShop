@@ -1,0 +1,57 @@
+name: CI
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  unit:
+    # Unit + integration + component tests on all three desktop platforms (cross-platform evidence).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet restore FlowerShop.sln
+      - run: dotnet build FlowerShop.sln -c Debug --no-restore
+      - name: Tests with coverage
+        run: dotnet test tests/FlowerShop.Tests --no-build --collect:"XPlat Code Coverage" --results-directory ./coverage
+      - name: Coverage summary
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          dotnet tool install -g dotnet-reportgenerator-globaltool
+          ~/.dotnet/tools/reportgenerator -reports:"coverage/**/coverage.cobertura.xml" -targetdir:coverage/report -reporttypes:"MarkdownSummaryGithub;Html"
+          cat coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest'
+        with: { name: coverage, path: coverage/report }
+
+  e2e:
+    # Linux: Playwright's WebKit (Safari engine) runs Blazor WebAssembly here (it does not on Windows).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 8.0.x }
+      - run: dotnet restore FlowerShop.sln
+      - run: dotnet build FlowerShop.sln -c Debug --no-restore
+      - name: Install Playwright browsers (Chromium, Firefox, WebKit)
+        run: pwsh tests/FlowerShop.E2E/bin/Debug/net8.0/playwright.ps1 install --with-deps
+      - name: Start the server
+        run: |
+          nohup dotnet run --project src/FlowerShop.Server --environment Development --no-build --urls http://localhost:5000 > server.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf http://localhost:5000/health && break; sleep 2; done
+      - name: Browser E2E tests (all browsers incl. WebKit)
+        run: dotnet test tests/FlowerShop.E2E --no-build --logger "trx;LogFileName=e2e.trx" --results-directory ./e2e-results
+        env:
+          SCREENSHOT_DIR: ${{ github.workspace }}/docs/screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-reports
+          path: |
+            e2e-results
+            docs/screenshots
+            server.log

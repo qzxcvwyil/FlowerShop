@@ -1,0 +1,10 @@
+bin/
+obj/
+TestResults/
+*.db
+publish/
+
+.vs/
+publish/
+coverage-report/
+*.user

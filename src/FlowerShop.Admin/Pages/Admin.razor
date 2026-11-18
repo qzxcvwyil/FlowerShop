@@ -1,0 +1,59 @@
+@page "/admin"
+@attribute [Authorize(Roles = "Admin")]
+@implements IAsyncDisposable
+@inject ApiClient Api
+@inject OrderHubClient Hub
+@inject ToastService Toasts
+<PageTitle>Admin – orders</PageTitle>
+<h1>Orders dashboard</h1>
+<p class="muted">@_orders.Count orders · @_orders.Count(o => o.Status == OrderStatus.Pending) pending</p>
+
+@if (_error is not null) { <div class="card center"><p>@_error</p><button class="btn" @onclick="Load">Retry</button></div> }
+
+<div class="stack">
+    <Virtualize Items="_orders" Context="o" ItemSize="190" OverscanCount="4">
+        <OrderCard Order="o">
+            <div class="row">
+                <span class="muted">Customer: @o.CustomerName</span>
+                <select aria-label="@($"Status of order {o.Id}")" value="@o.Status" disabled="@OrderWorkflow.IsFinal(o.Status)" @onchange="e => Change(o, e)">
+                    @foreach (var s in OrderWorkflow.Next(o.Status).Prepend(o.Status)) { <option value="@s">@s</option> }
+                </select>
+            </div>
+        </OrderCard>
+    </Virtualize>
+</div>
+
+@code {
+    List<OrderDto> _orders = [];
+    string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Hub.NewOrder += OnNew;
+        await Load();
+        await Hub.EnsureStartedAsync();
+    }
+
+    async Task Load()
+    {
+        var r = await Api.AllOrdersAsync();
+        if (r.IsOk) { _orders = r.Value!; _error = null; } else _error = r.Error;
+    }
+
+    async Task Change(OrderDto o, ChangeEventArgs e)
+    {
+        if (!Enum.TryParse<OrderStatus>(e.Value?.ToString(), out var status)) return;
+        var r = await Api.SetStatusAsync(o.Id, status);
+        if (r.IsOk) { var i = _orders.FindIndex(x => x.Id == o.Id); _orders[i] = r.Value!; Toasts.Success($"Order #{o.Id} → {status}"); }
+        else { Toasts.Error(r.Error!); await Load(); }
+    }
+
+    void OnNew(OrderDto o)
+    {
+        _orders = [o, .. _orders];
+        Toasts.Show($"New order #{o.Id} from {o.CustomerName}");
+        InvokeAsync(StateHasChanged);
+    }
+
+    public ValueTask DisposeAsync() { Hub.NewOrder -= OnNew; return ValueTask.CompletedTask; }
+}

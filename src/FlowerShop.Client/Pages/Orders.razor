@@ -1,0 +1,52 @@
+@page "/orders"
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject ApiClient Api
+@inject OrderHubClient Hub
+@inject ToastService Toasts
+<PageTitle>My orders</PageTitle>
+<h1>My orders</h1>
+<p class="muted" aria-live="polite">@(Hub.Connected ? "● Live updates on" : "○ Live updates connecting…")</p>
+
+@if (_error is not null) { <div class="card center"><p>@_error</p><button class="btn" @onclick="Load">Retry</button></div> }
+else
+{
+    <DataList TItem="OrderDto" Items="_orders" Loading="_loading" CssClass="stack">
+        <ItemTemplate Context="o"><OrderCard Order="o" /></ItemTemplate>
+        <Empty><p class="muted center">No orders yet. <a href="">Pick some flowers</a>.</p></Empty>
+    </DataList>
+}
+
+@code {
+    List<OrderDto>? _orders;
+    string? _error;
+    bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Hub.StatusChanged += OnStatus;
+        await Load();
+        await Hub.EnsureStartedAsync();
+        StateHasChanged();
+    }
+
+    async Task Load()
+    {
+        _loading = true; _error = null;
+        var r = await Api.MyOrdersAsync();
+        _loading = false;
+        if (r.IsOk) _orders = r.Value; else _error = r.Error;
+    }
+
+    void OnStatus(int id, OrderStatus status)
+    {
+        if (_orders is null) return;
+        var i = _orders.FindIndex(o => o.Id == id);
+        if (i < 0) return;
+        _orders[i] = _orders[i] with { Status = status }; // immutable update of the record
+        Toasts.Show($"Order #{id}: {status}");
+        InvokeAsync(StateHasChanged);
+    }
+
+    public ValueTask DisposeAsync() { Hub.StatusChanged -= OnStatus; return ValueTask.CompletedTask; }
+}

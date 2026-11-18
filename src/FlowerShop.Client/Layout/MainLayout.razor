@@ -1,0 +1,55 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject CartState Cart
+@inject AuthService Auth
+@inject BrowserStorage Storage
+@inject NavigationManager Nav
+
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+    <a class="brand" href="" aria-label="FlowerShop home">🌸 FlowerShop</a>
+    <nav aria-label="Main">
+        <NavLink href="" Match="NavLinkMatch.All">Shop</NavLink>
+        <AuthorizeView>
+            <Authorized>
+                <NavLink href="orders">My orders</NavLink>
+                <AuthorizeView Roles="Admin" Context="adm"><NavLink href="admin" Match="NavLinkMatch.All">Orders</NavLink><NavLink href="admin/products">Products</NavLink></AuthorizeView>
+                <button class="link" @onclick="SignOut">Sign out (@context.User.Identity?.Name)</button>
+            </Authorized>
+            <NotAuthorized><NavLink href="login">Sign in</NavLink></NotAuthorized>
+        </AuthorizeView>
+        <NavLink href="cart" class="cart" aria-label="@($"Cart, {Cart.Count} items")">🛒 <span class="badge">@Cart.Count</span></NavLink>
+    </nav>
+</header>
+<main id="main">
+    <CascadingValue Value="Cart">@Body</CascadingValue>
+</main>
+<ToastHost />
+<footer class="footer">© FlowerShop · Astana · Free delivery from @Pricing.FreeDeliveryFrom.ToString("N0") ₸</footer>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        Cart.Changed += OnCartChanged;
+        var saved = await Storage.GetAsync<List<CartLine>>("fs.cart");
+        if (saved is { Count: > 0 } && Cart.Count == 0) Cart.Restore(saved);
+    }
+
+    async void OnCartChanged()
+    {
+        try
+        {
+            await Storage.SetAsync("fs.cart", Cart.Lines);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException) { } // layout was disposed meanwhile
+    }
+
+    async Task SignOut()
+    {
+        await Auth.SignOutAsync();
+        Nav.NavigateTo("");
+    }
+
+    public void Dispose() => Cart.Changed -= OnCartChanged;
+}
